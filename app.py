@@ -6,7 +6,7 @@ st.set_page_config(page_title="EazyDiner Dashboard", layout="wide")
 
 st.title("🍽️ EazyDiner Bengaluru Restaurant Dashboard")
 
-df = pd.read_csv("EazyDiner_Cleaned (1).csv")
+df = pd.read_csv("EazyDiner_Cleaned (1).csv", sep=",")
 df.columns = df.columns.str.strip()
 
 st.write("Actual column names:", [repr(col) for col in df.columns])
