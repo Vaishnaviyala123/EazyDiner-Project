@@ -9,6 +9,8 @@ st.title("🍽️ EazyDiner Bengaluru Restaurant Dashboard")
 df = pd.read_csv("EazyDiner_Cleaned (1).csv")
 df.columns = df.columns.str.strip()
 
+st.write("Actual column names:", [repr(col) for col in df.columns])
+
 st.success(f"Dataset loaded successfully: {len(df)} restaurants")
 
 st.metric("Total Restaurants", len(df))
