@@ -1,9 +1,11 @@
-
 import streamlit as st
 import pandas as pd
 from pathlib import Path
 
-# Page settings
+# --------------------------------
+# 1. PAGE CONFIGURATION
+# --------------------------------
+
 st.set_page_config(
     page_title="EazyDiner Bengaluru Dashboard",
     page_icon="🍽️",
@@ -11,47 +13,79 @@ st.set_page_config(
 )
 
 st.title("🍽️ EazyDiner Bengaluru Restaurant Dashboard")
-st.write("Restaurant Data Analysis Project")
+st.markdown("### Restaurant Data Analysis Project")
 
-# Find CSV files in the project folder
+# --------------------------------
+# 2. FIND THE CSV FILE
+# --------------------------------
+
 project_folder = Path(__file__).resolve().parent
+
 csv_files = list(project_folder.glob("*.csv"))
 
 if not csv_files:
-    st.error("No CSV file found in the GitHub repository.")
-    st.write("Available files:", [p.name for p in project_folder.iterdir()])
+    st.error("No CSV file found in your GitHub repository.")
+    st.write("Available files:")
+    st.write([file.name for file in project_folder.iterdir()])
     st.stop()
 
-# Prefer the cleaned dataset
 cleaned_files = [
-    f for f in csv_files
-    if "cleaned" in f.name.lower()
+    file for file in csv_files
+    if "cleaned" in file.name.lower()
 ]
 
 if not cleaned_files:
-    st.error("No cleaned CSV dataset found.")
-    st.write("CSV files found:", [f.name for f in csv_files])
+    st.error("Cleaned CSV file not found.")
+    st.write("CSV files available:", [f.name for f in csv_files])
     st.stop()
 
-# Prefer the exact filename, otherwise use the first cleaned file
 file_path = next(
     (f for f in cleaned_files if f.name == "EazyDiner_Cleaned.csv"),
     cleaned_files[0]
 )
 
-st.caption(f"Dataset loaded from: {file_path.name}")
+st.caption(f"Dataset: {file_path.name}")
 
-# Read the CSV file
-try:
-    df = pd.read_csv(file_path, encoding="utf-8-sig")
-except Exception as error:
-    st.error(f"Unable to read the CSV file: {error}")
+# --------------------------------
+# 3. READ CSV WITH ENCODING FALLBACK
+# --------------------------------
+
+df = None
+
+for encoding in ["utf-8-sig", "cp1252", "latin1"]:
+    try:
+        df = pd.read_csv(
+            file_path,
+            encoding=encoding,
+            sep=",",
+            engine="python",
+            on_bad_lines="error"
+        )
+        st.success(f"Dataset loaded using {encoding} encoding.")
+        break
+
+    except UnicodeDecodeError:
+        continue
+
+    except Exception as error:
+        st.error(f"CSV reading error: {error}")
+        st.stop()
+
+if df is None:
+    st.error("Unable to read the CSV file.")
     st.stop()
 
-# Clean column names
-df.columns = df.columns.astype(str).str.strip()
+# --------------------------------
+# 4. CLEAN COLUMN NAMES
+# --------------------------------
 
-# Expected columns
+df.columns = (
+    df.columns.astype(str)
+    .str.strip()
+    .str.strip('"')
+    .str.strip("'")
+)
+
 required_columns = [
     "Restaurant_Name",
     "Location",
@@ -67,60 +101,90 @@ required_columns = [
     "URL"
 ]
 
-# Validate dataset
 missing_columns = [
-    column for column in required_columns
-    if column not in df.columns
+    col for col in required_columns
+    if col not in df.columns
 ]
 
 if missing_columns:
-    st.error("Your CSV file is not correctly formatted.")
+    st.error("The CSV structure does not match the expected dataset.")
     st.write("Detected columns:", df.columns.tolist())
     st.write("Missing columns:", missing_columns)
     st.dataframe(df.head(5))
     st.stop()
 
-# Convert numeric columns
-numeric_columns = [
+# --------------------------------
+# 5. DATA CLEANING
+# --------------------------------
+
+for col in [
     "Price_for_Two",
     "Rating",
     "Review_Count",
     "Latitude",
     "Longitude"
-]
+]:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-for column in numeric_columns:
-    df[column] = pd.to_numeric(df[column], errors="coerce")
+df["Cuisine"] = df["Cuisine"].fillna("Unknown")
+df["Location"] = df["Location"].fillna("Unknown")
+df["Restaurant_Name"] = df["Restaurant_Name"].fillna("Unknown")
 
-# Dashboard metrics
+# --------------------------------
+# 6. DASHBOARD METRICS
+# --------------------------------
+
 st.success(f"Successfully loaded {len(df)} restaurants!")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Total Restaurants", len(df))
+col1.metric(
+    "Total Restaurants",
+    f"{len(df):,}"
+)
+
 col2.metric(
     "Average Price for Two",
     f"₹{df['Price_for_Two'].mean():,.2f}"
 )
+
 col3.metric(
     "Average Rating",
     f"{df['Rating'].mean():.2f} ⭐"
 )
+
 col4.metric(
     "Total Reviews",
     f"{df['Review_Count'].sum():,.0f}"
 )
 
-# Cuisine analysis
-st.subheader("Top 10 Cuisines")
-st.bar_chart(df["Cuisine"].value_counts().head(10))
+st.divider()
 
-# Location analysis
-st.subheader("Top 10 Restaurant Locations")
-st.bar_chart(df["Location"].value_counts().head(10))
+# --------------------------------
+# 7. CUISINE ANALYSIS
+# --------------------------------
 
-# Price analysis
-st.subheader("Average Price by Cuisine")
+st.subheader("🍛 Top 10 Restaurant Cuisines")
+
+cuisine_data = df["Cuisine"].value_counts().head(10)
+
+st.bar_chart(cuisine_data)
+
+# --------------------------------
+# 8. LOCATION ANALYSIS
+# --------------------------------
+
+st.subheader("📍 Top 10 Restaurant Locations")
+
+location_data = df["Location"].value_counts().head(10)
+
+st.bar_chart(location_data)
+
+# --------------------------------
+# 9. PRICE ANALYSIS
+# --------------------------------
+
+st.subheader("💰 Average Price by Cuisine")
 
 price_data = (
     df.groupby("Cuisine")["Price_for_Two"]
@@ -131,10 +195,35 @@ price_data = (
 
 st.bar_chart(price_data)
 
-# Rating analysis
-st.subheader("Restaurant Rating Distribution")
-st.bar_chart(df["Rating"].value_counts().sort_index())
+# --------------------------------
+# 10. RATING ANALYSIS
+# --------------------------------
 
-# Restaurant data
-st.subheader("Complete Restaurant Dataset")
-st.dataframe(df, use_container_width=True)
+st.subheader("⭐ Restaurant Rating Distribution")
+
+rating_data = df["Rating"].value_counts().sort_index()
+
+st.bar_chart(rating_data)
+
+# --------------------------------
+# 11. RESTAURANT DETAILS
+# --------------------------------
+
+st.subheader("📋 Complete Restaurant Dataset")
+
+search = st.text_input("Search restaurant by name")
+
+if search:
+    display_df = df[
+        df["Restaurant_Name"].str.contains(
+            search,
+            case=False,
+            na=False
+        )
+    ]
+else:
+    display_df = df
+
+st.dataframe(display_df, use_container_width=True)
+
+st.caption("EazyDiner Bengaluru Restaurant Data Analysis Project")
