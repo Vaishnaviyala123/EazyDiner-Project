@@ -7,6 +7,9 @@ st.set_page_config(page_title="EazyDiner Dashboard", layout="wide")
 st.title("🍽️ EazyDiner Bengaluru Restaurant Dashboard")
 
 df = pd.read_csv("EazyDiner_Cleaned (1).csv")
+df.columns = df.columns.str.strip()
+
+st.success(f"Dataset loaded successfully: {len(df)} restaurants")
 
 st.metric("Total Restaurants", len(df))
 
