@@ -2,228 +2,251 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 
-# --------------------------------
-# 1. PAGE CONFIGURATION
-# --------------------------------
+# -----------------------------------
+# PAGE CONFIGURATION
+# -----------------------------------
 
 st.set_page_config(
-    page_title="EazyDiner Bengaluru Dashboard",
+    page_title="EazyDiner - Find Restaurants",
     page_icon="🍽️",
     layout="wide"
 )
 
-st.title("🍽️ EazyDiner Bengaluru Restaurant Dashboard")
-st.markdown("### Restaurant Data Analysis Project")
+# -----------------------------------
+# CUSTOM DESIGN
+# -----------------------------------
 
-# --------------------------------
-# 2. FIND THE CSV FILE
-# --------------------------------
+st.markdown("""
+<style>
+.main {
+    background-color: #fffaf5;
+}
+.hero {
+    background: linear-gradient(120deg, #702323, #bd633d);
+    padding: 35px;
+    border-radius: 15px;
+    color: white;
+    text-align: center;
+}
+.hero h1 {
+    color: white;
+}
+.restaurant-card {
+    background: white;
+    padding: 18px;
+    border: 1px solid #eee0d8;
+    border-radius: 14px;
+    margin-bottom: 12px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-project_folder = Path(__file__).resolve().parent
+# -----------------------------------
+# LOAD DATASET
+# -----------------------------------
 
-csv_files = list(project_folder.glob("*.csv"))
+folder = Path(__file__).resolve().parent
 
-if not csv_files:
-    st.error("No CSV file found in your GitHub repository.")
-    st.write("Available files:")
-    st.write([file.name for file in project_folder.iterdir()])
+files = list(folder.glob("*Cleaned*.csv"))
+
+if not files:
+    st.error("Restaurant CSV file not found in the repository.")
     st.stop()
 
-cleaned_files = [
-    file for file in csv_files
-    if "cleaned" in file.name.lower()
-]
-
-if not cleaned_files:
-    st.error("Cleaned CSV file not found.")
-    st.write("CSV files available:", [f.name for f in csv_files])
-    st.stop()
-
-file_path = next(
-    (f for f in cleaned_files if f.name == "EazyDiner_Cleaned.csv"),
-    cleaned_files[0]
-)
-
-st.caption(f"Dataset: {file_path.name}")
-
-# --------------------------------
-# 3. READ CSV WITH ENCODING FALLBACK
-# --------------------------------
-
+file_path = files[0]
 df = None
 
 for encoding in ["utf-8-sig", "cp1252", "latin1"]:
     try:
-        df = pd.read_csv(
-            file_path,
-            encoding=encoding,
-            sep=",",
-            engine="python",
-            on_bad_lines="error"
-        )
-        st.success(f"Dataset loaded using {encoding} encoding.")
+        df = pd.read_csv(file_path, encoding=encoding)
         break
-
     except UnicodeDecodeError:
         continue
 
-    except Exception as error:
-        st.error(f"CSV reading error: {error}")
-        st.stop()
-
 if df is None:
-    st.error("Unable to read the CSV file.")
+    st.error("Unable to read the restaurant dataset.")
     st.stop()
 
-# --------------------------------
-# 4. CLEAN COLUMN NAMES
-# --------------------------------
+df.columns = df.columns.astype(str).str.strip()
 
-df.columns = (
-    df.columns.astype(str)
-    .str.strip()
-    .str.strip('"')
-    .str.strip("'")
-)
-
-required_columns = [
-    "Restaurant_Name",
-    "Location",
-    "Cuisine",
-    "Price_for_Two",
-    "Rating",
-    "Review_Count",
-    "Address",
-    "Phone_Number",
-    "Latitude",
-    "Longitude",
-    "Opening_Hours",
-    "URL"
+required = [
+    "Restaurant_Name", "Location", "Cuisine",
+    "Price_for_Two", "Rating", "Review_Count",
+    "Address", "Phone_Number", "URL"
 ]
 
-missing_columns = [
-    col for col in required_columns
-    if col not in df.columns
-]
+missing = [col for col in required if col not in df.columns]
 
-if missing_columns:
-    st.error("The CSV structure does not match the expected dataset.")
-    st.write("Detected columns:", df.columns.tolist())
-    st.write("Missing columns:", missing_columns)
-    st.dataframe(df.head(5))
+if missing:
+    st.error(f"Missing dataset columns: {missing}")
     st.stop()
 
-# --------------------------------
-# 5. DATA CLEANING
-# --------------------------------
-
-for col in [
-    "Price_for_Two",
-    "Rating",
-    "Review_Count",
-    "Latitude",
-    "Longitude"
-]:
+# Clean data
+for col in ["Price_for_Two", "Rating", "Review_Count"]:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-df["Cuisine"] = df["Cuisine"].fillna("Unknown")
+df["Restaurant_Name"] = df["Restaurant_Name"].fillna("Restaurant")
 df["Location"] = df["Location"].fillna("Unknown")
-df["Restaurant_Name"] = df["Restaurant_Name"].fillna("Unknown")
+df["Cuisine"] = df["Cuisine"].fillna("Not specified")
 
-# --------------------------------
-# 6. DASHBOARD METRICS
-# --------------------------------
+# -----------------------------------
+# HEADER
+# -----------------------------------
 
-st.success(f"Successfully loaded {len(df)} restaurants!")
+st.markdown("""
+<div class="hero">
+    <h1>🍽️ EazyDiner</h1>
+    <h3>Discover the best restaurants in Bengaluru</h3>
+    <p>Explore restaurants, cuisines, ratings and dining options.</p>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2, col3, col4 = st.columns(4)
+st.write("")
 
-col1.metric(
-    "Total Restaurants",
-    f"{len(df):,}"
+# -----------------------------------
+# SEARCH AND FILTERS
+# -----------------------------------
+
+st.subheader("Find Your Restaurant")
+
+search = st.text_input(
+    "🔍 Search restaurant",
+    placeholder="Enter restaurant name..."
 )
 
-col2.metric(
-    "Average Price for Two",
-    f"₹{df['Price_for_Two'].mean():,.2f}"
+locations = ["All Locations"] + sorted(
+    df["Location"].dropna().astype(str).unique().tolist()
 )
 
-col3.metric(
-    "Average Rating",
-    f"{df['Rating'].mean():.2f} ⭐"
+cuisines = ["All Cuisines"] + sorted(
+    df["Cuisine"].dropna().astype(str).unique().tolist()
 )
 
-col4.metric(
-    "Total Reviews",
-    f"{df['Review_Count'].sum():,.0f}"
-)
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    selected_location = st.selectbox(
+        "Choose Location", locations
+    )
+
+with col2:
+    selected_cuisine = st.selectbox(
+        "Choose Cuisine", cuisines
+    )
+
+with col3:
+    sort_option = st.selectbox(
+        "Sort Restaurants",
+        ["Recommended", "Highest Rating", "Lowest Price"]
+    )
+
+# -----------------------------------
+# FILTER DATA
+# -----------------------------------
+
+filtered = df.copy()
+
+if search:
+    filtered = filtered[
+        filtered["Restaurant_Name"].astype(str).str.contains(
+            search, case=False, na=False
+        )
+    ]
+
+if selected_location != "All Locations":
+    filtered = filtered[
+        filtered["Location"] == selected_location
+    ]
+
+if selected_cuisine != "All Cuisines":
+    filtered = filtered[
+        filtered["Cuisine"] == selected_cuisine
+    ]
+
+if sort_option == "Highest Rating":
+    filtered = filtered.sort_values(
+        "Rating", ascending=False, na_position="last"
+    )
+
+elif sort_option == "Lowest Price":
+    filtered = filtered.sort_values(
+        "Price_for_Two", ascending=True, na_position="last"
+    )
+
+st.write(f"### {len(filtered)} Restaurants Found")
+
+# -----------------------------------
+# RESTAURANT LISTINGS
+# -----------------------------------
+
+if filtered.empty:
+    st.warning("No restaurants found. Try different search filters.")
+
+else:
+    for start in range(0, len(filtered), 2):
+        cols = st.columns(2)
+
+        for offset, col in enumerate(cols):
+            index = start + offset
+
+            if index >= len(filtered):
+                break
+
+            restaurant = filtered.iloc[index]
+
+            with col:
+                with st.container(border=True):
+
+                    st.subheader(
+                        f"🍴 {restaurant['Restaurant_Name']}"
+                    )
+
+                    rating = restaurant["Rating"]
+
+                    if pd.notna(rating):
+                        st.write(f"⭐ Rating: {rating:.1f}/5")
+                    else:
+                        st.write("⭐ Rating not available")
+
+                    st.write(f"📍 {restaurant['Location']}")
+                    st.write(f"🍛 {restaurant['Cuisine']}")
+
+                    price = restaurant["Price_for_Two"]
+
+                    if pd.notna(price):
+                        st.write(f"💰 ₹{price:,.0f} for two")
+                    else:
+                        st.write("Price not available")
+
+                    st.write(f"📌 {restaurant['Address']}")
+
+                    url = restaurant["URL"]
+
+                    if pd.notna(url) and str(url).strip().startswith("https://"):
+                        st.link_button(
+                            "View Restaurant / Menu / Booking",
+                            str(url).strip(),
+                            use_container_width=True
+                        )
+                    elif pd.notna(url) and str(url).strip().startswith("http://"):
+                        st.link_button(
+                            "View Restaurant / Menu / Booking",
+                            str(url).strip(),
+                            use_container_width=True
+                        )
+                    else:
+                        st.caption("Restaurant booking link unavailable.")
+
+# -----------------------------------
+# FOOTER
+# -----------------------------------
 
 st.divider()
 
-# --------------------------------
-# 7. CUISINE ANALYSIS
-# --------------------------------
-
-st.subheader("🍛 Top 10 Restaurant Cuisines")
-
-cuisine_data = df["Cuisine"].value_counts().head(10)
-
-st.bar_chart(cuisine_data)
-
-# --------------------------------
-# 8. LOCATION ANALYSIS
-# --------------------------------
-
-st.subheader("📍 Top 10 Restaurant Locations")
-
-location_data = df["Location"].value_counts().head(10)
-
-st.bar_chart(location_data)
-
-# --------------------------------
-# 9. PRICE ANALYSIS
-# --------------------------------
-
-st.subheader("💰 Average Price by Cuisine")
-
-price_data = (
-    df.groupby("Cuisine")["Price_for_Two"]
-    .mean()
-    .sort_values(ascending=False)
-    .head(10)
-)
-
-st.bar_chart(price_data)
-
-# --------------------------------
-# 10. RATING ANALYSIS
-# --------------------------------
-
-st.subheader("⭐ Restaurant Rating Distribution")
-
-rating_data = df["Rating"].value_counts().sort_index()
-
-st.bar_chart(rating_data)
-
-# --------------------------------
-# 11. RESTAURANT DETAILS
-# --------------------------------
-
-st.subheader("📋 Complete Restaurant Dataset")
-
-search = st.text_input("Search restaurant by name")
-
-if search:
-    display_df = df[
-        df["Restaurant_Name"].str.contains(
-            search,
-            case=False,
-            na=False
-        )
-    ]
-else:
-    display_df = df
-
-st.dataframe(display_df, use_container_width=True)
-
-st.caption("EazyDiner Bengaluru Restaurant Data Analysis Project")
+st.markdown("""
+<center>
+<h3>🍽️ EazyDiner Bengaluru</h3>
+<p>Discover restaurants and explore dining options.</p>
+<p>Web Scraping and Data Analysis Project</p>
+</center>
+""", unsafe_allow_html=True)
